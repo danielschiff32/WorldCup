@@ -1,0 +1,168 @@
+install.packages("readr")
+require(readr)
+#require readr to read in the datasets
+install.packages("dplyr")
+require(dplyr)
+#require dplyr to manipulate the data
+install.packages("ggplot2")
+require(ggplot2)
+#require ggplot2 to make graphs 
+install.packages("rworldmap")
+require(rworldmap)
+#require r world map to get world data
+install.packages("gridExtra")
+require(gridExtra)
+#require grid extra to make a one page chart of the graphs
+
+WCA <- read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2018/2018-06-12/week11_fifa_audience.csv")
+Rank <- read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRgPKsIQ2z1ZVapKAB_l1OnR7Wr3d4UCXNzeMsAbGj_yY9NEy34qqsBOJQOAQmuwijdI2HA6jsnRShx/pub?gid=0&single=true&output=csv")
+
+
+## Read in the downloaded from google sheets, download to CSV name it Rank
+
+WCAM <- mutate(WCA, total = population_share + tv_audience_share + gdp_weighted_share, na.rm = FALSE)
+
+#Rename dataset WCA 
+country <- select(WCAM, country)
+#Make a list called country just to look at
+WCAR <- merge(WCAM, Rank)
+#Merge The two datasets to make a combined set
+
+WCAC <- WCAR %>%
+  group_by(confederation) %>%
+  summarise(Total_pop_share = sum(population_share), 
+            Avg_pop_share = mean(population_share), 
+            Total_aud_share = sum(tv_audience_share),
+            Avg_aud_share = mean(tv_audience_share), 
+            Total_gdp = sum(gdp_weighted_share), 
+            Avg_gdp = mean(gdp_weighted_share), ARank = mean(Rank))
+#Look at some summerizations of the data because you are curious of how it looks
+
+world <- map_data('world')
+#gwt the world data points to make the world maps
+
+world$country <- world$region
+world$country[world$country == 'USA'] <- 'United States'
+world$country[world$country == 'UK'] <- 'United Kingdom'
+world$country[world$country == 'Democratic Republic of the Congo'] <- 'Congo DR'
+world$country[world$country == 'Republic of Congo'] <- 'Congo, Rep.'
+world$country[world$country == 'Antigua & Barbuda'] <- 'Antigua'
+world$country[world$country == 'South Sudan'] <- 'Sudan'
+world$country[world$country == 'Western Sahara'] <- 'Mauritania'
+world$country[world$country == 'Bhutan'] <- 'Nepal'
+world$country[world$country == 'Greenland'] <- 'Denmark'
+#rename some lands to match them with the other data set
+
+
+cdata <- merge(WCAR, world, by.x = 'country', all.x = TRUE) %>%
+  arrange(order)
+#combine the data and arrange it so its in order for the ploting
+
+#Map By Rankings
+rank1 <- ggplot(cdata,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=Rank))
+grank <- rank1 + scale_fill_gradient2() + theme_classic() +
+  labs(title = "World Map", subtitle = "June 2018 FIFA Rankings", caption = "Sources: Tidyverse and FIFA.com") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed") +
+  guides(fill=guide_legend(title="FIFA Rank"))
+grank
+#Map By GDP
+gdp <- ggplot(cdata,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=gdp_weighted_share))
+ggdp <- gdp + scale_fill_gradient(high = 'green', low = 'red') + theme_classic() +
+  labs(title = "World Map", subtitle = "2018 World GDP Share", caption = "Sources: Tidyverse and FIFA.com") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed")+
+  guides(fill=guide_legend(title="GDP\nPercent"))
+ggdp
+#Map By Tv Share
+tv <- ggplot(cdata,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=tv_audience_share))
+gtv <- tv + scale_fill_gradient(high = 'yellow', low = 'black') + theme_classic() +
+  labs(title = "World Map", subtitle = "Television Share for 2018 World Cup", caption = "Sources: Tidyverse and FIFA.com") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed")+
+  guides(fill=guide_legend(title="TV\nAudience"))
+gtv
+
+t <- ggplot(cdata,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=total))
+gt <- t + scale_fill_gradient2(low = "white", mid = "blue", high = "red", midpoint = 30) + theme_classic() +
+  labs(title = "World Map", subtitle = "Total Percentage Share", caption = "Sources: Tidyverse and FIFA.com") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed")+
+  guides(fill=guide_legend(title="Total\nPercentage"))
+gt
+
+
+a <- grid.arrange(grank, ggdp, gtv, gt)
+a
+
+gg <- ggplot(cdata, aes(x=confederation, y=Rank))+geom_boxplot(aes(fill=confederation))
+gg+theme_classic()+labs(title = "Boxplot of Confederation Ranks", caption = "Sources: Tidyverse and FIFA.com") +
+  xlab("Confederation") + ylab("Rank")
+
+
+rank.aov <- aov(Rank~confederation, WCAR)
+summary(rank.aov)
+
+ranktotal.aov <- aov(Rank~confederation + total, WCAR)
+summary(ranktotal.aov)
+
+reg <- ggplot(cdata, aes(x=total, y=Rank))+geom_point(aes(color=confederation))+scale_x_sqrt()
+reg + geom_smooth(method = "lm", aes(color=confederation))+labs(title= "Rank vs Total Graph", caption = "Sources: Tidyverse and FIFA.com")+
+  xlab("Total Percentage (People + GDP + TV Audience") + ylab("FIFA Rank")
+
+
+
+UEFA <- filter(cdata, confederation == "UEFA")
+rankUEFA <- ggplot(UEFA,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=Rank))
+grankUEFA <- rankUEFA + scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 75) + theme_classic() +
+  labs(title = "World Map", subtitle = "June 2018 FIFA Rankings", caption = "Sources: Tidyverse and FIFA.com") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed") +
+  guides(fill=guide_legend(title="FIFA Rank"))
+grankUEFA 
+                                                                
+
+
+
+
+
+library(shiny)
+
+ui <- fluidPage(
+  
+  titlePanel("FIFA Rankings"),
+  
+  sidebarLayout(
+    
+    sidebarPanel(
+      
+      radioButtons("t", "Select the confederations", choices = c("UEFA", "CAF", "CONCACAF", "AFC", "CONMEBOL", "OFC"),
+                   selected = "UEFA")
+      
+    ),
+    
+    mainPanel(
+      
+      plotOutput("graph")
+      
+    )
+    
+  )
+  
+)
+server <- function(input, output) {
+  
+  output$graph <- renderPlot({
+    
+    t <- input$t
+    
+    cdata <-  filter(cdata, confederation  == t)
+    
+    rank12 <- ggplot(cdata,aes(x = long, y = lat, group=group))+geom_polygon(color = 'black', aes(fill=Rank, label = Rank)) 
+    graph1 <- rank12 + scale_fill_gradient2() + theme_classic() +
+      labs(title = "FIFA Rankings from June 2018 for", subtitle = t, caption = "Sources: Tidyverse and FIFA.com") +
+      geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed") +
+      guides(fill=guide_legend(title="FIFA Rank"))
+    graph1
+  })}   
+
+
+shinyApp(ui = ui, server = server)
+
+
+
